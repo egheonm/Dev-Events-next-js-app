@@ -117,18 +117,36 @@ eventSchema.pre('save', function (next) {
       .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
   }
 
-  // Normalize date to ISO format if modified
+  // Validate and normalize date to YYYY-MM-DD format if modified
   if (this.isModified('date')) {
-    try {
-      const parsedDate = new Date(this.date);
-      if (isNaN(parsedDate.getTime())) {
-        return next(new Error('Invalid date format'));
-      }
-      // Store in ISO format (YYYY-MM-DD)
-      this.date = parsedDate.toISOString().split('T')[0];
-    } catch (error) {
-      return next(new Error('Invalid date format'));
+    // Validate YYYY-MM-DD format
+    const dateRegex = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+    const match = this.date.match(dateRegex);
+    
+    if (!match) {
+      return next(new Error('Invalid date format - expected YYYY-MM-DD'));
     }
+    
+    // Parse date components to validate it's a real date
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const day = parseInt(match[3], 10);
+    
+    // Create date in UTC to avoid timezone shifts
+    const parsedDate = new Date(Date.UTC(year, month - 1, day));
+    
+    // Verify the date is valid (handles invalid dates like 2023-02-30)
+    if (
+      isNaN(parsedDate.getTime()) ||
+      parsedDate.getUTCFullYear() !== year ||
+      parsedDate.getUTCMonth() !== month - 1 ||
+      parsedDate.getUTCDate() !== day
+    ) {
+      return next(new Error('Invalid date format - expected YYYY-MM-DD'));
+    }
+    
+    // Date is already in correct format, no need to modify
+    this.date = match[0];
   }
 
   // Normalize time format (HH:MM) if modified
