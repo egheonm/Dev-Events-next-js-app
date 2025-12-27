@@ -37,28 +37,19 @@ const bookingSchema = new Schema<IBooking>(
 );
 
 // Pre-save hook to validate that the referenced Event exists
-bookingSchema.pre('save', async function (next) {
+bookingSchema.pre('save', async function () {
   // Only validate eventId if it's new or modified
   if (this.isModified('eventId')) {
-    try {
-      // Import Event model dynamically to avoid circular dependency
-      const Event = mongoose.models.Event || (await import('./event.model')).default;
-      
-      // Check if the event exists in the database
-      const eventExists = await Event.exists({ _id: this.eventId });
-      
-      if (!eventExists) {
-        return next(new Error('Referenced event does not exist'));
-      }
-    } catch (error) {
-      if (error instanceof Error) {
-        return next(error);
-      }
-      return next(new Error('Failed to validate event reference'));
+    // Import Event model dynamically to avoid circular dependency
+    const Event = mongoose.models.Event || (await import('./event.model')).default;
+    
+    // Check if the event exists in the database
+    const eventExists = await Event.exists({ _id: this.eventId });
+    
+    if (!eventExists) {
+      throw new Error('Referenced event does not exist');
     }
   }
-
-  next();
 });
 
 // Create index on eventId for efficient queries

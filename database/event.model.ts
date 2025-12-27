@@ -105,7 +105,7 @@ const eventSchema = new Schema<IEvent>(
 );
 
 // Pre-save hook for slug generation and date/time normalization
-eventSchema.pre('save', function (next) {
+eventSchema.pre('save', function () {
   // Generate slug only if title is new or modified
   if (this.isModified('title')) {
     this.slug = this.title
@@ -124,7 +124,7 @@ eventSchema.pre('save', function (next) {
     const match = this.date.match(dateRegex);
     
     if (!match) {
-      return next(new Error('Invalid date format - expected YYYY-MM-DD'));
+      throw new Error('Invalid date format - expected YYYY-MM-DD');
     }
     
     // Parse date components to validate it's a real date
@@ -142,7 +142,7 @@ eventSchema.pre('save', function (next) {
       parsedDate.getUTCMonth() !== month - 1 ||
       parsedDate.getUTCDate() !== day
     ) {
-      return next(new Error('Invalid date format - expected YYYY-MM-DD'));
+      throw new Error('Invalid date format - expected YYYY-MM-DD');
     }
     
     // Date is already in correct format, no need to modify
@@ -153,18 +153,17 @@ eventSchema.pre('save', function (next) {
   if (this.isModified('time')) {
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
     if (!timeRegex.test(this.time)) {
-      return next(new Error('Time must be in HH:MM format'));
+      throw new Error('Time must be in HH:MM format');
     }
     // Ensure consistent HH:MM format
     const [hours, minutes] = this.time.split(':');
     this.time = `${hours.padStart(2, '0')}:${minutes}`;
   }
-
-  next();
 });
 
-// Create unique index on slug for efficient lookups
-eventSchema.index({ slug: 1 });
+// `unique: true` is already set on the `slug` path above, which creates
+// a unique index. Removing the explicit schema.index() to avoid duplicate
+// index warnings from Mongoose.
 
 // Export the Event model (reuse existing model if already compiled)
 const Event: Model<IEvent> =
