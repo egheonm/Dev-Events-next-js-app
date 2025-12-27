@@ -71,6 +71,28 @@ const getAnchorAndDir = (
   }
 };
 
+interface ShaderUniform<T> {
+  value: T;
+}
+
+interface LightUniforms {
+  iTime: ShaderUniform<number>;
+  iResolution: ShaderUniform<[number, number]>;
+  rayPos: ShaderUniform<[number, number]>;
+  rayDir: ShaderUniform<[number, number]>;
+  raysColor: ShaderUniform<[number, number, number]>;
+  raysSpeed: ShaderUniform<number>;
+  lightSpread: ShaderUniform<number>;
+  rayLength: ShaderUniform<number>;
+  pulsating: ShaderUniform<number>;
+  fadeDistance: ShaderUniform<number>;
+  saturation: ShaderUniform<number>;
+  mousePos: ShaderUniform<[number, number]>;
+  mouseInfluence: ShaderUniform<number>;
+  noiseAmount: ShaderUniform<number>;
+  distortion: ShaderUniform<number>;
+}
+
 const LightRays: React.FC<LightRaysProps> = ({
   raysOrigin = "top-center",
   raysColor = DEFAULT_COLOR,
@@ -87,12 +109,12 @@ const LightRays: React.FC<LightRaysProps> = ({
   className = "",
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const uniformsRef = useRef<any>(null);
+  const uniformsRef = useRef<LightUniforms | null>(null);
   const rendererRef = useRef<Renderer | null>(null);
   const mouseRef = useRef({ x: 0.5, y: 0.5 });
   const smoothMouseRef = useRef({ x: 0.5, y: 0.5 });
   const animationIdRef = useRef<number | null>(null);
-  const meshRef = useRef<any>(null);
+  const meshRef = useRef<Mesh | null>(null);
   const cleanupFunctionRef = useRef<(() => void) | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -250,7 +272,7 @@ void main() {
   gl_FragColor  = color;
 }`;
 
-      const uniforms = {
+      const uniforms: LightUniforms = {
         iTime: { value: 0 },
         iResolution: { value: [1, 1] },
 
@@ -292,7 +314,7 @@ void main() {
         const w = wCSS * dpr;
         const h = hCSS * dpr;
 
-        uniforms.iResolution.value = [w, h];
+        uniforms.iResolution.value = [w, h] as [number, number];
 
         const { anchor, dir } = getAnchorAndDir(raysOrigin, w, h);
         uniforms.rayPos.value = anchor;
