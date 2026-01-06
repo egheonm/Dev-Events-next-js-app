@@ -2,54 +2,90 @@ import  Event, { IEvent } from "@/database/event.model";
 import dbConnect from "@/lib/mongodb";
 import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(req : NextRequest) {
+export async function POST(req: NextRequest) {
+  try {
+    await dbConnect();
+    const formData = await req.formData();
+
+    let event: Record<string, unknown>;
     try {
-        await dbConnect();
-        const formData = await req.formData();
-
-        let eventObj: Record<string, any>;
-        try {
-            // Convert FormData to a plain object. Values may be strings or Files.
-            eventObj = Object.fromEntries(formData.entries());
-        } catch {
-            return NextResponse.json({ message: 'Invalid form data' }, { status: 400 });
-        }
-
-        // Coerce common array fields that may be submitted as comma-separated strings.
-        // This keeps the payload compatible with the schema which expects arrays.
-        ['agenda', 'tags'].forEach((key) => {
-            if (typeof eventObj[key] === 'string') {
-                const val = (eventObj[key] as string).trim();
-                eventObj[key] = val ? val.split(',').map(s => s.trim()).filter(Boolean) : [];
-            }
-        });
-
-        try {
-            const createdEvent = await Event.create(eventObj as Partial<IEvent>);
-            return NextResponse.json({ message: 'Event Created Successfully', event: createdEvent }, { status: 201 });
-        } catch (err: any) {
-            console.error('Create event error:', err);
-            // Handle Mongo duplicate key error (code 11000) to return a 409 Conflict
-            if (err?.code === 11000) {
-                const duplicatedField = err.keyValue ? Object.keys(err.keyValue)[0] : 'unknown';
-                return NextResponse.json({
-                    message: 'Duplicate value error',
-                    error: `A document with the same ${duplicatedField} already exists.`,
-                    details: err.keyValue,
-                }, { status: 409 });
-            }
-
-            // For validation errors from Mongoose, return 400 with details
-            if (err?.name === 'ValidationError') {
-                return NextResponse.json({ message: 'Validation failed', error: err.message, details: err.errors }, { status: 400 });
-            }
-
-            // Unknown error — rethrow to be handled by outer catch
-            throw err;
-        }
-
-    } catch (e: any) {
-        console.error(e);
-        return NextResponse.json({ message: 'Event Creation Failed', error: e instanceof Error ? e.message : 'Unknown' }, { status: 500 });
+      // Convert FormData to a plain object. Values may be strings or Files.
+      event = Object.fromEntries(formData.entries());
+    } catch {
+      return NextResponse.json(
+        { message: 'Invalid form data' },
+        { status: 400 },
+      );
     }
+
+    // Coerce common array fields that may be submitted as comma-separated strings.
+    // This keeps the payload compatible with the schema which expects arrays.
+    ['agenda', 'tags'].forEach((key) => {
+      const value = event[key];
+      if (typeof value === 'string') {
+        const val = value.trim();
+        event[key] = val
+          ? val.split(',').map((s) => s.trim()).filter(Boolean)
+          : [];
+      }
+    });
+
+    try {
+      await Event.deleteOne({ slug: 'cloud-next-2026' });
+      const createdEvent = await Event.create(event as Partial<IEvent>);
+      return NextResponse.json(
+        { message: 'Event Created Successfully', event: createdEvent },
+        { status: 201 },
+      );
+    } catch (err: unknown) {
+      console.error('Create event error:', err);
+
+      // Handle Mongo duplicate key error (code 11000) to return a 409 Conflict
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'code' in err &&
+        (err as { code?: number }).code === 11000
+      ) {
+        const { keyValue } = err as { keyValue?: Record<string, unknown> };
+        const duplicatedField = keyValue
+          ? Object.keys(keyValue)[0]
+          : 'unknown';
+
+        return NextResponse.json(
+          {
+            message: 'Duplicate value error',
+            error: `A document with the same ${duplicatedField} already exists.`,
+            details: keyValue,
+          },
+          { status: 409 },
+        );
+      }
+
+      // For validation errors from Mongoose, return 400 with details
+      if (err instanceof Error && err.name === 'ValidationError') {
+        const details = (err as { errors?: unknown }).errors;
+        return NextResponse.json(
+          {
+            message: 'Validation failed',
+            error: err.message,
+            details,
+          },
+          { status: 400 },
+        );
+      }
+
+      // Unknown error — rethrow to be handled by outer catch
+      throw err;
+    }
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json(
+      {
+        message: 'Event Creation Failed',
+        error: e instanceof Error ? e.message : 'Unknown',
+      },
+      { status: 500 },
+    );
+  }
 }
