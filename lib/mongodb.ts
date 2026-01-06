@@ -57,7 +57,7 @@ if (!MONGODB_URI) {
   try {
     // Await the connection promise and cache the result
     cached.conn = await cached.promise;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Reset the promise on error so the next call can retry
     cached.promise = null;
 
@@ -76,7 +76,10 @@ if (!MONGODB_URI) {
     //   (non-SRV) form from the Atlas UI (hosts + port list), or ensure
     //   your DNS/network allows SRV lookups to `mongodb.net`.
     // - Check IP whitelist / VPC rules in your Atlas project.
-    if (typeof error?.message === 'string' && /querySrv|ECONNREFUSED|ENOTFOUND/i.test(error.message)) {
+    if (
+      error instanceof Error &&
+      /querySrv|ECONNREFUSED|ENOTFOUND/i.test(error.message)
+    ) {
       const isSrv = (MONGODB_URI || '').startsWith('mongodb+srv://');
       const extra = isSrv
         ? 'The URI uses mongodb+srv:// — DNS SRV lookup failed. Try a non-SRV connection string or fix DNS/network.'

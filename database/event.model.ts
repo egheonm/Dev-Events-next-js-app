@@ -104,38 +104,62 @@ const eventSchema = new Schema<IEvent>(
   }
 );
 
-// Pre-save hook for slug generation and date/time normalization
-eventSchema.pre('save', function () {
-  // Generate slug only if title is new or modified
-  if (this.isModified('title')) {
-    this.slug = this.title
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '') // Remove special characters
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
-      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+// Pre-validate hook for slug generation and date/time normalization
+type EventDocument = IEvent &
+  Document & {
+    isModified?: (path?: keyof IEvent | string) => boolean;
+  };
+
+eventSchema.pre('validate', async function () {
+  // `this` is the document being saved
+  const doc = this as EventDocument;
+
+  // Generate a URL-friendly slug when title changes or slug is absent.
+  if (doc.isModified?.('title') || !doc.slug) {
+    const slugify = (str: string) =>
+      str
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+
+    const base = slugify(doc.title || '');
+    let candidate = base || 'event';
+
+    // Use the model constructor to query existing slugs and append a counter
+    const EventModel =
+      (mongoose.models.Event as Model<IEvent>) ||
+      mongoose.model<IEvent>('Event', eventSchema);
+    let counter = 0;
+
+    // Loop until we find a unique slug
+    while (true) {
+      const exists = await EventModel.exists({ slug: candidate });
+      if (!exists) break;
+      counter += 1;
+      candidate = `${base}-${counter}`;
+    }
+
+    doc.slug = candidate;
   }
 
   // Validate and normalize date to YYYY-MM-DD format if modified
-  if (this.isModified('date')) {
-    // Validate YYYY-MM-DD format
+  if (doc.isModified?.('date')) {
     const dateRegex = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
-    const match = this.date.match(dateRegex);
-    
+    const match = (doc.date as unknown as string)?.match?.(dateRegex);
+
     if (!match) {
       throw new Error('Invalid date format - expected YYYY-MM-DD');
     }
-    
-    // Parse date components to validate it's a real date
+
     const year = parseInt(match[1], 10);
     const month = parseInt(match[2], 10);
     const day = parseInt(match[3], 10);
-    
-    // Create date in UTC to avoid timezone shifts
+
     const parsedDate = new Date(Date.UTC(year, month - 1, day));
-    
-    // Verify the date is valid (handles invalid dates like 2023-02-30)
+
     if (
       isNaN(parsedDate.getTime()) ||
       parsedDate.getUTCFullYear() !== year ||
@@ -144,20 +168,18 @@ eventSchema.pre('save', function () {
     ) {
       throw new Error('Invalid date format - expected YYYY-MM-DD');
     }
-    
-    // Date is already in correct format, no need to modify
-    this.date = match[0];
+
+    doc.date = match[0];
   }
 
   // Normalize time format (HH:MM) if modified
-  if (this.isModified('time')) {
+  if (doc.isModified?.('time')) {
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    if (!timeRegex.test(this.time)) {
+    if (!timeRegex.test(doc.time as unknown as string)) {
       throw new Error('Time must be in HH:MM format');
     }
-    // Ensure consistent HH:MM format
-    const [hours, minutes] = this.time.split(':');
-    this.time = `${hours.padStart(2, '0')}:${minutes}`;
+    const [hours, minutes] = (doc.time as unknown as string).split(':');
+    doc.time = `${hours.padStart(2, '0')}:${minutes}`;
   }
 });
 
