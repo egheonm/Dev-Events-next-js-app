@@ -31,7 +31,14 @@ export async function POST(req: NextRequest) {
     });
 
     try {
-      await Event.deleteOne({ slug: 'cloud-next-2026' });
+      // Optionally clean up a known test event in non-production environments.
+      if (
+        process.env.NODE_ENV === 'test' ||
+        process.env.CLEANUP_TEST_EVENTS === 'true'
+      ) {
+        await Event.deleteOne({ slug: 'cloud-next-2026' });
+      }
+
       const createdEvent = await Event.create(event as Partial<IEvent>);
       return NextResponse.json(
         { message: 'Event Created Successfully', event: createdEvent },
